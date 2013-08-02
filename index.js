@@ -1,11 +1,9 @@
-var alg = {
-  astar : require('./lib/astar')
-};
-
-module.exports = {
-	alg: alg,
+var trip = {
+  astar: require('./lib/astar'),
 
   create: function(algorithm, map, options) {
-    return alg[algorithm].create(map, options);
+    return trip[algorithm].create(map, options);
   }
-};
+}
+
+module.exports = trip;

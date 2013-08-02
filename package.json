@@ -14,10 +14,10 @@
     "type": "git",
     "url": "https://github.com/jaz303/trip.git"
   },
-  "dependencies": {
-    "min-heap": "0.0.1"
-  },
   "devDependencies": {
-    "gridworld": "0.0.2"
+    "gridworld": "~0.1.0"
+  },
+  "dependencies": {
+    "min-heap": "~0.2.1"
   }
 }

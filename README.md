@@ -1,6 +1,6 @@
 # trip
 
-A collection of map-agnostic pathfind algorithms.
+A collection of map-agnostic pathfinding algorithms.
 
 ## Demo
 
