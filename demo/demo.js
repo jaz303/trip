@@ -1,6 +1,20 @@
-var routemaster = require('../'),
-    gridworld   = require('gridworld');
+var trip      = require('../'),
+    GridWorld = require('gridworld');
 
-window.init = function(canvas) {
-  console.log(canvas);
+var canvas = null,
+    world  = null;
+
+function init() {
+
+  canvas = document.getElementById('canvas');
+
+  world = new GridWorld(canvas, 20, 20, {
+    resizeCanvas: true,
+    drawBorder: true
+  });
+
+  world.draw();
+
 }
+
+window.init = init;

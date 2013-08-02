@@ -1,10 +1,24 @@
 ;(function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require=="function"&&require;if(!s&&o)return o(n,!0);if(r)return r(n,!0);throw new Error("Cannot find module '"+n+"'")}var u=t[n]={exports:{}};e[n][0].call(u.exports,function(t){var r=e[n][1][t];return i(r?r:t)},u,u.exports)}return t[n].exports}var r=typeof require=="function"&&require;for(var s=0;s<n.length;s++)i(n[s]);return i})({1:[function(require,module,exports){
-var routemaster = require('../'),
-    gridworld   = require('gridworld');
+var trip      = require('../'),
+    GridWorld = require('gridworld');
 
-window.init = function(canvas) {
-  console.log(canvas);
+var canvas = null,
+    world  = null;
+
+function init() {
+
+  canvas = document.getElementById('canvas');
+
+  world = new GridWorld(canvas, 20, 20, {
+    resizeCanvas: true,
+    drawBorder: true
+  });
+
+  world.draw();
+
 }
+
+window.init = init;
 },{"../":2,"gridworld":6}],2:[function(require,module,exports){
 var alg = {
   astar : require('./lib/astar')
@@ -380,7 +394,7 @@ GridWorld.prototype = {
 
 };
 
-module.exports.GridWorld = GridWorld;
+module.exports = GridWorld;
 },{}],7:[function(require,module,exports){
 function I(v) { return v; }
 
