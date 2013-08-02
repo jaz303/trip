@@ -9,29 +9,54 @@ function init() {
 
   canvas = document.getElementById('canvas');
 
-  world = new GridWorld(canvas, 20, 20, {
+  world = new GridWorld(canvas, 20, 15, {
     resizeCanvas: true,
     drawBorder: true
   });
 
   world.draw();
 
+  // Map representation for gridworld
+  var map = {
+    eachNode      : world.eachNode.bind(world),
+    eachNeighbour : world.eachNodeNeighbour.bind(world),
+    compare       : function(n1,n2) { return n1 === n2; },
+    distance      : function(from,to) { return 1; }
+  };
+
+  // Engines
+  var astar = trip.create('astar', map, {
+    storage: 'object',
+    heuristic: function(n1,n2) {
+      return Math.abs(n2.x-n1.x) + Math.abs(n2.y-n1.y);
+    }
+  });
+
+  var start = null;
+
+  world.onclick = function(node) {
+    if (!start) {
+      start = node;
+    } else {
+      var result = astar.calculate(start, node);
+      console.log("result:", result);
+      start = null;
+    }
+  }
+
 }
 
 window.init = init;
 },{"../":2,"gridworld":6}],2:[function(require,module,exports){
-var alg = {
-  astar : require('./lib/astar')
-};
-
-module.exports = {
-	alg: alg,
+var trip = {
+  astar: require('./lib/astar'),
 
   create: function(algorithm, map, options) {
-    return alg[algorithm].create(map, options);
+    return trip[algorithm].create(map, options);
   }
-};
+}
 
+module.exports = trip;
 },{"./lib/astar":3}],3:[function(require,module,exports){
 var SimpleStorage = require('./simple_storage'),
     ObjectStorage = require('./object_storage');
@@ -45,7 +70,7 @@ function create(map, options) {
 
   options = options || {};
 
-  var storage = options.storage || SimpleStorage;
+  var storage = options.storage || new SimpleStorage();
   if (typeof storage === 'string') {
     storage = new storageFactory[storage]();
   }
@@ -55,38 +80,26 @@ function create(map, options) {
     throw "A-star requires a heuristic function";
   }
 
-  var d = options.distance;
-  if (!d) {
-    throw "A-star requires a distance function";
-  }
-
-  var eachNeighbour = options.eachNeighbour;
-  if (!eachNeighbour) {
-    throw "A-star requires a neighbour iterator";
-  }
-
-  var eq = options.nodeCompare || function(l, r) { return l === r; };
-
   function doAStar(startNode, goalNode, returnPath) {
 
-    storage.reset();
+    storage.reset(map);
     storage.addToOpenSet(startNode, 0.0, h(startNode, goalNode), null);
 
     while (storage.hasOpenNodes()) {
       var currNode = storage.removeBestOpenNode();
-      if (eq(currNode, goalNode)) {
+      if (map.compare(currNode, goalNode)) {
         return storage.resultTo(goalNode, returnPath);
       } else {
         storage.addToClosedSet(currNode);
-        eachNeighbour(currNode, function(neighbour, ix) {
+        map.eachNeighbour(currNode, function(neighbour, ix) {
           if (storage.isInClosedSet(neighbour)) {
             return;
           }
-          var gScore = storage.g(currNode) + distance(currNode, neighbour, ix);
+          var gScore = storage.g(currNode) + map.distance(currNode, neighbour, ix);
           if (!storage.isInOpenSet(neighbour)) {
-            storage.addToOpenSet(neighbour, gScore, h(neighbour, goal), currNode);
+            storage.addToOpenSet(neighbour, gScore, h(neighbour, goalNode), currNode);
           } else {
-            storage.updateG(neighbour, gScore, curr);
+            storage.updateG(neighbour, gScore, currNode);
           }
         });
       }
@@ -95,7 +108,7 @@ function create(map, options) {
     return {
       success   : false,
       cost      : Infinity,
-      path      : returnPath ? [] : null
+      path      : null
     };
 
   }
@@ -109,11 +122,15 @@ function create(map, options) {
 }
 
 exports.create = create;
+exports.SimpleStorage = SimpleStorage;
+exports.ObjectStorage = ObjectStorage;
 },{"./object_storage":4,"./simple_storage":5}],4:[function(require,module,exports){
 var MinHeap = require('min-heap');
 
 function ObjectStorage() {
-  this.open = new MinHeap(function(node) { return node.cost; });
+  this.open = new MinHeap(function(n1,n2) {
+    return n1.__astar_f - n2.__astar_f;
+  });
 }
 
 ObjectStorage.prototype = {
@@ -122,16 +139,19 @@ ObjectStorage.prototype = {
     map.eachNode(function(node) {
       node.__astar_closed = false;
       node.__astar_parent = null;
-      node.__astar_g = null;
+      node.__astar_steps = 0;
+      node.__astar_f = 0;
+      node.__astar_g = 0;
+      node.__astar_h = 0;
     });
   },
 
   hasOpenNodes: function() {
-    return !this.open.isEmpty();
+    return this.open.size > 0;
   },
 
   removeBestOpenNode: function() {
-    return this.open.remove().node;
+    return this.open.removeHead();
   },
 
   addToClosedSet: function(node) {
@@ -139,7 +159,20 @@ ObjectStorage.prototype = {
   },
 
   addToOpenSet: function(node, g, h, parent) {
+    if (parent) {
+      node.__astar_parent = parent;
+      node.__astar_steps = parent.__astar_steps + 1;
+    } else {
+      node.__astar_steps = 0;
+    }
+    node.__astar_f = g + h;
+    node.__astar_g = g;
+    node.__astar_h = h;
+    this.open.insert(node);
+  },
 
+  isInOpenSet: function(node) {
+    return this.open.contains(node);
   },
 
   isInClosedSet: function(node) {
@@ -152,34 +185,34 @@ ObjectStorage.prototype = {
 
   updateG: function(node, g, parent) {
     if (g < node.__astar_g) {
+      this.open.remove(node);
       node.__astar_g = g;
+      node.__astar_f = g + node.__astar_h;
       node.__astar_parent = parent;
+      node.__astar_steps = parent.__astar_steps + 1;
+      this.open.insert(node);
     }
   },
 
   resultTo: function(node, returnPath) {
-    var cost = 0;
-    
+    var result = {
+      success : true,
+      cost    : node.__astar_f,
+      steps   : node.__astar_steps
+    };
+
     if (returnPath) {
       var path = [];
       while (node) {
         path.unshift(node);
-        cost += node.__astar_h;
         node = node.__astar_parent;
       }
+      result.path = path;
     } else {
-      var path = null;
-      while (node) {
-        cost += node.__astar_h;
-        node = node.__astar_parent;
-      }
+      result.path = null;
     }
 
-    return {
-      success : true,
-      cost    : cost,
-      path    : path
-    };
+    return result;
   }
 };
 
@@ -300,8 +333,6 @@ function GridWorld(canvas, width, height, options) {
     
     var node = p2n(evt.offsetX, evt.offsetY);
     
-    console.log
-
     if (node)
       self.onclick(node);
   
@@ -359,32 +390,23 @@ GridWorld.prototype = {
   },
 
   eachNeighbour: function(x, y, callback) {
-    
-    var w   = this.width,
-        h   = this.height,
-        ns  = this.nodes,
-        ix  = (y * w) + x;
-
-    if (x > 0   && !ns[ix-1].blocked) callback(x-1, y);
-    if (x < w-1 && !ns[ix+1].blocked) callback(x+1, y);
-    if (y > 0   && !ns[ix-w].blocked) callback(x, y-1);
-    if (y < h-1 && !ns[ix+w].blocked) callback(x, y+1);
-
+    return this.eachNodeNeighbour(this.nodes[(y * this.width) + x], callback);
   },
 
-  eachNeighbourNode: function(node, callback) {
+  eachNodeNeighbour: function(node, callback) {
 
     var x   = node.x,
         y   = node.y,
         w   = this.width,
         h   = this.height,
         ns  = this.nodes,
-        ix  = (y * w) + h;
+        ix  = (y * w) + x,
+        nix = 0;
 
-    if (x > 0   && !ns[ix-1].blocked) callback(ns[ix-1]);
-    if (x < w-1 && !ns[ix+1].blocked) callback(ns[ix+1]);
-    if (y > 0   && !ns[ix-w].blocked) callback(ns[ix-w]);
-    if (y < h-1 && !ns[ix+w].blocked) callback(ns[ix+w]);
+    if (x > 0   && !ns[ix-1].blocked) callback(ns[ix-1], nix++);
+    if (x < w-1 && !ns[ix+1].blocked) callback(ns[ix+1], nix++);
+    if (y > 0   && !ns[ix-w].blocked) callback(ns[ix-w], nix++);
+    if (y < h-1 && !ns[ix+w].blocked) callback(ns[ix+w], nix++);
   
   },
 
@@ -396,27 +418,40 @@ GridWorld.prototype = {
 
 module.exports = GridWorld;
 },{}],7:[function(require,module,exports){
-function I(v) { return v; }
+function CMP(l,r) { return l-r; }
 
 function MinHeap(scoreFn) {
-  this.score = scoreFn || I;
+  this.cmp = scoreFn || CMP;
   this.heap = [];
   this.size = 0;
 }
 
 MinHeap.prototype = {
+
+  clear: function() {
+    this.heap.length = 0;
+    this.size = 0;
+  },
+
+  contains: function(item) {
+    var heap = this.heap;
+    for (var i = 0, sz = this.size; i < sz; ++i) {
+      if (heap[i] === item)
+        return true;
+    }
+    return false;
+  },
   
   insert: function(item) {
     
-    var score = this.score(item),
-        heap  = this.heap,
+    var heap  = this.heap,
         ix    = this.size++;
         
     heap[ix] = item;
     
     var parent = (ix-1)>>1;
     
-    while ((ix > 0) && (this.score(heap[parent]) > score)) {
+    while ((ix > 0) && this.cmp(heap[parent], item) > 0) {
       var tmp = heap[parent];
       heap[parent] = heap[ix];
       heap[ix] = tmp;
@@ -426,32 +461,56 @@ MinHeap.prototype = {
         
   },
   
-  remove: function() {
+  removeHead: function() {
     
     var heap  = this.heap,
-        score = this.score;
+        cmp   = this.cmp;
     
     if (this.size === 0)
       return undefined;
       
     var out = heap[0];
     
-    heap[0] = heap[--this.size];
+    this._bubble(0);
+    
+    return out;
+    
+  },
+
+  remove: function(item) {
+
+    var heap = this.heap;
+
+    for (var i = 0; i < this.size; ++i) {
+      if (heap[i] === item) {
+        this._bubble(i);
+        return true;
+      }
+    }
+
+    return false;
+
+  },
+
+  _bubble: function(ix) {
+
+    var heap  = this.heap,
+        cmp   = this.cmp;
+
+    heap[ix] = heap[--this.size];
     heap[this.size] = null;
-    
-    var ix = 0;
-    
+
     while (true) {
       
       var leftIx  = (ix<<1)+1,
           rightIx = (ix<<1)+2,
           minIx   = ix;
       
-      if (leftIx < this.size && score(heap[leftIx]) < score(heap[minIx])) {
+      if (leftIx < this.size && cmp(heap[leftIx], heap[minIx]) < 0) {
         minIx = leftIx;
       }
       
-      if (rightIx < this.size && score(heap[rightIx]) < score(heap[minIx])) {
+      if (rightIx < this.size && cmp(heap[rightIx], heap[minIx]) < 0) {
         minIx = rightIx;
       }
       
@@ -465,13 +524,11 @@ MinHeap.prototype = {
       }
       
     }
-    
-    return out;
-    
+
   }
 
 };
 
-exports.MinHeap = MinHeap;
+module.exports = MinHeap;
 },{}]},{},[1])
 ;
