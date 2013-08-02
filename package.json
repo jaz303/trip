@@ -1,0 +1,23 @@
+{
+  "name": "trip",
+  "version": "0.0.1",
+  "description": "Various map-agnostic path-finding algorithms",
+  "main": "index.js",
+  "keywords": [
+    "pathfinding",
+    "a*",
+    "dijkstra"
+  ],
+  "author": "Jason Frame <jason@onehackoranother.com> (jasonframe.co.uk)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jaz303/trip.git"
+  },
+  "dependencies": {
+    "min-heap": "0.0.1"
+  },
+  "devDependencies": {
+    "gridworld": "0.0.2"
+  }
+}
